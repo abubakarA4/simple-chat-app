@@ -2,95 +2,55 @@
 <html>
 
 <head>
+    <title>Simple Chat</title>
 
-    <title>WhatsApp Style Chat</title>
+    <script src="/socket.io/socket.io.js"></script>
 
     <style>
         body {
-            margin: 0;
             font-family: Arial;
             background: #ece5dd;
         }
 
-        .chat {
+        #chat {
             width: 400px;
-            height: 650px;
             margin: auto;
-            display: flex;
-            flex-direction: column;
+            margin-top: 50px;
             background: white;
-        }
-
-        .header {
-            background: #075e54;
-            color: white;
-            padding: 15px;
-        }
-
-        .status {
-            font-size: 12px;
-            opacity: 0.8;
-        }
-
-        .messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 10px;
-            background: #e5ddd5;
-        }
-
-        .msg {
-            margin: 10px 0;
-        }
-
-        .me {
-            text-align: right;
-        }
-
-        .bubble {
-            display: inline-block;
-            padding: 8px 12px;
+            padding: 20px;
             border-radius: 10px;
-            background: white;
-            max-width: 65%;
         }
 
-        .me .bubble {
+        #messages {
+            list-style: none;
+            padding: 0;
+            height: 300px;
+            overflow-y: auto;
+        }
+
+        #messages li {
+            padding: 8px;
+            margin: 5px;
             background: #dcf8c6;
+            border-radius: 5px;
         }
 
-        img {
-            max-width: 200px;
-            border-radius: 8px;
-            margin-top: 5px;
-        }
-
-        .typing {
-            font-size: 12px;
-            color: #555;
-            margin-left: 10px;
-        }
-
-        .input {
+        #inputArea {
             display: flex;
-            padding: 10px;
-            background: #f0f0f0;
+            gap: 10px;
+            margin-top: 10px;
         }
 
-        input {
+        #message {
             flex: 1;
             padding: 10px;
-            border: none;
-            border-radius: 20px;
-            outline: none;
         }
 
         button {
+            padding: 10px;
             background: #25d366;
             border: none;
-            padding: 10px;
-            margin-left: 5px;
-            border-radius: 50%;
+            color: white;
             cursor: pointer;
         }
     </style>
@@ -99,133 +59,51 @@
 
 <body>
 
-    <div class="chat">
+    <div id="chat">
 
-        <div class="header">
+        <h2>Simple Chat</h2>
 
-            WhatsApp Chat
-            <div id="online" class="status">0 users online</div>
+        <ul id="messages"></ul>
 
-        </div>
-
-        <div id="messages" class="messages"></div>
-
-        <div id="typing" class="typing"></div>
-
-        <div class="input">
-
-            <input id="messageInput" placeholder="Type message">
-
-            <input type="file" id="imageInput">
-
-            <button onclick="sendMessage()">➤</button>
-
+        <div id="inputArea">
+            <input id="message" placeholder="Type message">
+            <button id="sendBtn">Send</button>
         </div>
 
     </div>
-
-    <script src="http://localhost:5000/socket.io/socket.io.js"></script>
 
     <script>
 
         const socket = io();
 
-        let username = prompt("Enter your name")
+        const sendBtn = document.getElementById("sendBtn");
+        const input = document.getElementById("message");
+        const messages = document.getElementById("messages");
 
-        const input = document.getElementById("messageInput")
-
-        input.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") {
-                sendMessage()
-            }
-        })
-
-        input.addEventListener("input", () => {
-            socket.emit("typing", username)
-        })
+        sendBtn.addEventListener("click", sendMessage);
 
         function sendMessage() {
 
-            const text = input.value
-            const image = document.getElementById("imageInput").files[0]
+            const msg = input.value;
 
-            if (image) {
+            if (msg.trim() === "") return;
 
-                const formData = new FormData()
-                formData.append("image", image)
+            socket.emit("chat message", msg);
 
-                fetch("http://localhost:5000/upload", {
-                    method: "POST",
-                    body: formData
-                })
-                    .then(res => res.json())
-                    .then(data => {
-
-                        socket.emit("chat message", {
-                            user: username,
-                            text: text,
-                            image: data.image
-                        })
-
-                    })
-
-            } else {
-
-                socket.emit("chat message", {
-                    user: username,
-                    text: text
-                })
-
-            }
-
-            input.value = ""
-            document.getElementById("imageInput").value = ""
-
+            input.value = "";
         }
 
-        socket.on("chat message", (data) => {
+        socket.on("chat message", function (msg) {
 
-            const box = document.getElementById("messages")
+            const li = document.createElement("li");
 
-            const div = document.createElement("div")
+            li.textContent = msg;
 
-            div.classList.add("msg")
+            messages.appendChild(li);
 
-            if (data.user === username) {
-                div.classList.add("me")
-            }
+            messages.scrollTop = messages.scrollHeight;
 
-            let content = `<div class="bubble"><b>${data.user}</b><br>${data.text}`
-
-            if (data.image) {
-                content += `<br><img src="http://localhost:5000/uploads/${data.image}">`
-            }
-
-            content += `</div>`
-
-            div.innerHTML = content
-
-            box.appendChild(div)
-
-            box.scrollTop = box.scrollHeight
-
-        })
-
-        socket.on("typing", (name) => {
-
-            const typing = document.getElementById("typing")
-
-            typing.innerText = name + " is typing..."
-
-            setTimeout(() => {
-                typing.innerText = ""
-            }, 1500)
-
-        })
-
-        socket.on("online users", (count) => {
-            document.getElementById("online").innerText = count + " users online"
-        })
+        });
 
     </script>
 
