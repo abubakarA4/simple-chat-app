@@ -4,32 +4,24 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
+const io = new Server(server);
 
-const io = new Server(server, {
-    cors: {
-        origin: "*"
-    }
-});
-
-// serve index.html
-app.get("/", (req, res) => {
-    res.sendFile(__dirname + "/index.html");
-});
+app.use(express.static(__dirname));
 
 io.on("connection", (socket) => {
-
     console.log("User connected");
 
-    socket.on("chat message", (data) => {
-        io.emit("chat message", data);
+    socket.on("chat message", (msg) => {
+        io.emit("chat message", msg);
     });
 
     socket.on("disconnect", () => {
         console.log("User disconnected");
     });
-
 });
 
-server.listen(5000, "0.0.0.0", () => {
-    console.log("Server running on port 5000");
+const PORT = process.env.PORT || 5000;
+
+server.listen(PORT, () => {
+    console.log("Server running on port " + PORT);
 });
