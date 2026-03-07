@@ -1,7 +1,13 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const mongoose = require("mongoose");
+const Message = require("./message");
+mongoose.connect("mongodb://127.0.0.1:27017/chatapp");
 
+mongoose.connection.once("open", () => {
+    console.log("MongoDB connected");
+});
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
