@@ -46,21 +46,24 @@
 
         .message {
             padding: 10px 14px;
-            border-radius: 8px;
-            max-width: 70%;
+            border-radius: 10px;
+            max-width: 65%;
             font-size: 14px;
+            position: relative;
         }
 
         .sent {
             background: #005c4b;
             color: white;
             align-self: flex-end;
+            border-bottom-right-radius: 2px;
         }
 
         .received {
             background: #202c33;
             color: white;
             align-self: flex-start;
+            border-bottom-left-radius: 2px;
         }
 
         #inputArea {
@@ -91,68 +94,302 @@
 
 <body>
 
-    <div id="app">
+    <div style="display:flex">
 
-        <div id="header">
-            Realtime Chat
+        <div id="chatList" style="width:220px;background:#111b21;color:white;overflow-y:auto">
+
+            <div style="padding:15px;font-size:18px;border-bottom:1px solid #333">
+                Chats
+            </div>
+
+            <div id="users"></div>
+
         </div>
 
-        <div id="messages"></div>
+        <div id="app">
 
-        <div id="inputArea">
-            <input id="message" placeholder="Type a message">
-            <button id="sendBtn">Send</button>
+            <div id="header">
+                Realtime Chat
+            </div>
+
+            <div id="messages"></div>
+            <div id="typing" style="color:#aaa; padding-left:15px; font-size:13px;"></div>
+
+            <div id="inputArea">
+
+                <button id="emojiBtn">😊</button>
+
+                <button id="attachBtn">📎</button>
+
+                <input id="message" placeholder="Type a message">
+
+                <button id="sendBtn">Send</button>
+
+            </div>
+            <input type="file" id="imageInput" style="display:none">
         </div>
 
-    </div>
+        <script>
 
-    <script>
+            const socket = io();
 
-        const socket = io();
+            const sendBtn = document.getElementById("sendBtn");
+            const input = document.getElementById("message");
+            const emojiBtn = document.getElementById("emojiBtn");
 
-        const sendBtn = document.getElementById("sendBtn");
-        const input = document.getElementById("message");
-        const messages = document.getElementById("messages");
+            emojiBtn.onclick = () => {
 
-        const username = prompt("Enter your name");
+                input.value += "😊";
 
-        sendBtn.addEventListener("click", sendMessage);
+            };
+            const messages = document.getElementById("messages");
+            const typingDiv = document.getElementById("typing");
+            const attachBtn = document.getElementById("attachBtn");
+            const imageInput = document.getElementById("imageInput");
 
-        function sendMessage() {
+            attachBtn.onclick = () => {
 
-            const msg = input.value;
+                imageInput.click();
 
-            if (msg.trim() === "") return;
+            };
+            imageInput.addEventListener("change", () => {
 
-            socket.emit("chat message", {
-                user: username,
-                text: msg
+                const file = imageInput.files[0];
+
+                if (!file) return;
+
+                const reader = new FileReader();
+
+                reader.onload = function () {
+
+                    socket.emit("chat message", {
+                        username: username,
+                        image: reader.result
+                    });
+
+                };
+
+                reader.readAsDataURL(file);
+
             });
+            let lastMessages = {};
+            let lastMessageTime = {};
+            let unreadCount = {};
+            let typing = false;
+            /* DETECT TYPING */
 
-            input.value = "";
-        }
+            input.addEventListener("input", () => {
 
-        socket.on("chat message", function (data) {
+                if (!typing) {
+                    typing = true;
+                    socket.emit("typing", username);
+                }
 
-            const div = document.createElement("div");
+                setTimeout(() => {
+                    typing = false;
+                    socket.emit("stop typing");
+                }, 1000);
 
-            div.classList.add("message");
+            });
+            const username = prompt("Enter your name");
+            const usersList = document.getElementById("users");
+            let currentChatUser = null;
+            socket.emit("user joined", username);
 
-            if (data.user === username) {
-                div.classList.add("sent");
-            } else {
-                div.classList.add("received");
+            /* SEND MESSAGE */
+
+            sendBtn.addEventListener("click", sendMessage);
+
+            function sendMessage() {
+
+                const msg = input.value;
+
+                if (msg.trim() === "") return;
+
+                socket.emit("chat message", {
+                    sender: username,
+                    receiver: currentChatUser,
+                    text: msg
+                });
+                lastMessages[currentChatUser] = msg;
+                lastMessageTime[currentChatUser] = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                input.value = "";
             }
 
-            div.textContent = data.user + ": " + data.text;
 
-            messages.appendChild(div);
+            /* RECEIVE NEW MESSAGE */
+            socket.on("typing", (user) => {
+                typingDiv.textContent = user + " is typing...";
+            });
 
-            messages.scrollTop = messages.scrollHeight;
+            socket.on("stop typing", () => {
+                typingDiv.textContent = "";
+            });
+            socket.on("chat message", function (data) {
 
-        });
+                addMessage(data);
 
-    </script>
+                if (data.username !== username) {
+
+                    lastMessages[data.username] = data.text;
+
+                    if (currentChatUser !== data.username) {
+
+                        unreadCount[data.username] =
+                            (unreadCount[data.username] || 0) + 1;
+
+                    }
+
+                }
+
+            });
+            socket.on("online users", function (users) {
+
+                usersList.innerHTML = "";
+                users.forEach(function (user) {
+
+                    const div = document.createElement("div");
+
+                    div.style.padding = "15px";
+                    div.style.borderBottom = "1px solid #222";
+                    div.style.cursor = "pointer";
+
+                    div.innerHTML = `
+<div style="display:flex;align-items:center;gap:10px">
+
+<img src="https://i.pravatar.cc/40?u=${user}" 
+style="width:40px;height:40px;border-radius:50%">
+
+<div style="flex:1">
+<div style="font-weight:bold">${user}</div>
+
+<div style="color:#00a884;font-size:11px">
+online
+</div>
+
+<div style="color:#aaa;font-size:12px">
+${lastMessages[user] || "Start chatting"}
+</div>
+
+</div>
+
+<div style="font-size:11px;color:#aaa">
+${lastMessageTime[user] || ""}
+</div>
+
+</div>
+`;
+
+                    div.onclick = () => {
+
+                        currentChatUser = user;
+
+                        messages.innerHTML = "";
+
+                        document.getElementById("header").innerHTML = `
+${user}
+<div style="font-size:12px;color:#00a884">online</div>
+`;
+
+                    };
+
+                    usersList.appendChild(div);
+
+                });
+
+            });
+            /* LOAD OLD MESSAGES FROM DATABASE */
+
+            socket.on("load messages", function (messagesList) {
+
+                messagesList.forEach(function (msg) {
+
+                    addMessage(msg);
+
+                });
+
+            });
+
+
+            /* DISPLAY MESSAGE FUNCTION */
+
+            function addMessage(data) {
+
+                const div = document.createElement("div");
+
+                div.classList.add("message");
+
+                if (data.username === username) {
+                    div.classList.add("sent");
+                } else {
+                    div.classList.add("received");
+                }
+                if (data.image) {
+
+                    div.innerHTML = `
+    <img src="${data.image}" style="max-width:200px;border-radius:8px">
+    `;
+
+                } else {
+
+                    div.innerHTML = `
+    ${data.text}
+    <div style="font-size:10px;color:#ccc;margin-top:4px;text-align:right">
+    ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+    </div>
+    `;
+
+                }
+                div.id = data.id || Math.random();
+
+                div.innerHTML = `
+${data.text}
+<div style="font-size:10px;color:#ccc;margin-top:4px;text-align:right">
+${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+</div>
+`;
+                /* AUTO SEEN WHEN MESSAGE ARRIVES */
+
+                messages.addEventListener("DOMNodeInserted", () => {
+
+                    const last = messages.lastChild;
+
+                    if (!last.classList.contains("sent")) {
+
+                        socket.emit("message seen", last.id);
+
+                    }
+
+                });
+                messages.appendChild(div);
+
+                messages.scrollTop = messages.scrollHeight;
+
+                /* ADD SEEN ICON */
+
+                if (data.username === username) {
+
+                    const tick = document.createElement("span");
+
+                    tick.textContent = " ✔";
+
+                    tick.style.fontSize = "12px";
+
+                    tick.style.marginLeft = "6px";
+
+                    tick.className = "tick";
+
+                    div.appendChild(tick);
+
+                }
+
+                messages.appendChild(div);
+
+                messages.scrollTop = messages.scrollHeight;
+
+            }
+
+        </script>
 
 </body>
 
