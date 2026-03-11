@@ -14,15 +14,14 @@ mongoose.connect("mongodb://Abbu:abbu12345@ac-ctpa3sj-shard-00-00.taror55.mongod
         console.log("MongoDB connection error:", err);
     });
 
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.static(__dirname));
 app.use(express.json());
-/* SIGNUP ROUTE */
 
+/* SIGNUP ROUTE */
 app.post("/signup", async (req, res) => {
 
     const { username, password } = req.body;
@@ -38,9 +37,7 @@ app.post("/signup", async (req, res) => {
 
 });
 
-
 /* LOGIN ROUTE */
-
 app.post("/login", async (req, res) => {
 
     const { username, password } = req.body;
@@ -60,8 +57,11 @@ app.post("/login", async (req, res) => {
 
 let onlineUsers = {};
 
-
+/* SOCKET CONNECTION */
 io.on("connection", (socket) => {
+
+    console.log("User connected");
+
     socket.on("typing", (username) => {
         socket.broadcast.emit("typing", username);
     });
@@ -69,22 +69,18 @@ io.on("connection", (socket) => {
     socket.on("stop typing", () => {
         socket.broadcast.emit("stop typing");
     });
+
     /* MESSAGE SEEN SYSTEM */
-
     socket.on("message seen", (msgId) => {
-
         io.emit("message seen", msgId);
-
     });
-    console.log("User connected");
 
     // Load old messages
     Message.find().sort({ time: 1 }).then(messages => {
         socket.emit("load messages", messages);
     });
 
-
-    // User joins
+    /* USER JOIN */
     socket.on("user joined", (username) => {
 
         socket.username = username;
@@ -95,7 +91,7 @@ io.on("connection", (socket) => {
 
     });
 
-    // Receive message
+    /* RECEIVE MESSAGE */
     socket.on("chat message", async (data) => {
 
         const message = new Message({
@@ -107,45 +103,32 @@ io.on("connection", (socket) => {
 
         await message.save();
 
-        io.emit("chat message", data);
+        const receiverSocket = onlineUsers[data.receiver];
+
+        if (receiverSocket) {
+            io.to(receiverSocket).emit("chat message", data);
+        }
+
+        socket.emit("chat message", data);
 
     });
 
-    const receiverSocket = onlineUsers[data.to];
+    /* USER DISCONNECT */
+    socket.on("disconnect", () => {
 
-    const message = new Message({
-        username: data.username,
-        text: data.text
+        if (socket.username) {
+            delete onlineUsers[socket.username];
+        }
+
+        io.emit("online users", Object.keys(onlineUsers));
+
+        console.log("User disconnected");
+
     });
 
-    await message.save();
-
-    if (receiverSocket) {
-
-        io.to(receiverSocket).emit("chat message", data);
-
-    }
-
-    socket.emit("chat message", data);
-
 });
 
-// User disconnect
-socket.on("disconnect", () => {
-
-    if (socket.username) {
-        onlineUsers = onlineUsers.filter(u => u !== socket.username);
-    }
-
-    io.emit("online users", onlineUsers);
-
-    console.log("User disconnected");
-
-});
-
-});
-
-
+/* SERVER START */
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
